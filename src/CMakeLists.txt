@@ -19,4 +19,5 @@ target_include_directories (mraa-binding
 target_link_libraries (mraa-binding
                        ${MRAA_LIBRARIES}
                        ${JSON-C_LIBRARIES}
+                       jstruct
 )
