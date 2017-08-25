@@ -21,11 +21,18 @@
 #define AFB_BINDING_VERSION 2
 
 #include <afb/afb-binding.h>
-
 #include <json-c/json.h>
 #include <string.h>
-
 #include <mraa.h>
+
+#include "wrapjson/wrap-json.h"
+
+//#include "uthash/utarray.h"
+//struct _i2c afb_dd2c_contexts[10];
+//UT_icd afb_i2c_contexts_icd = {sizeof(mraa_i2c_context), NULL, NULL, NULL};
+//UT_array *afb_i2c_contexts;
+
+mraa_i2c_context i2c_dev[10];
 
 static void version(struct afb_req request)
 {
@@ -41,7 +48,7 @@ static void
 command(struct afb_req request)
 {
     struct json_object *queryJ;
-    mraa_result_t res;
+    mraa_result_t mraa_ret;
     json_object *mraa_resp = json_object_new_object();
 
     queryJ = afb_req_json(request);
@@ -50,21 +57,76 @@ command(struct afb_req request)
         return;
     }
 
-    enum json_type jtype= json_object_get_type(queryJ);
-    switch (jtype) {
-        case json_type_array:
-            if (strcmp(json_object_get_string(json_object_array_get_idx(queryJ, 0)), "mraa_i2c_address")) {
-                res = mraa_i2c_address((mraa_i2c_context) json_object_get_string(json_object_array_get_idx(queryJ, 1)), json_object_get_int(json_object_array_get_idx(queryJ, 2)));
-                json_object_object_add(mraa_resp, "mraa_result_t", json_object_new_int(res));
-            }
-            break;
-        default:
-            afb_req_fail_f(request, "query-notarray","query=%s not valid JSON mraa.io command", afb_req_value(request,""));
-            return;
-    }
+    char* command;
+    char* data;
+    char* dataout;
+    int intarg, intarg2, index, jwrap_ret;
 
-    afb_req_success(request, mraa_resp, NULL);
-    return;
+    jwrap_ret = wrap_json_unpack(queryJ, "[si!]", &command, &index);
+    if (jwrap_ret == 0) {
+		if (strcmp(command, "mraa_i2c_read_byte") == 0) {
+			int mraaread = mraa_i2c_read_byte(i2c_dev[index]);
+			wrap_json_pack(&mraa_resp, "{s:i}", "mraachar", mraaread);
+		}
+		afb_req_success(request, mraa_resp, NULL);
+		return;		
+    }
+ 
+    jwrap_ret = wrap_json_unpack(queryJ, "[sii!]", &command, &index, &intarg);
+    if (jwrap_ret == 0) {
+		if (strcmp(command, "mraa_i2c_address") == 0) {
+			mraa_ret = mraa_i2c_address(i2c_dev[index], intarg);
+			wrap_json_pack(&mraa_resp, "{s:i}", "mraa_result_t", mraa_ret);
+		}
+		else if (strcmp(command, "mraa_i2c_frequency") == 0) {
+			mraa_ret = mraa_i2c_frequency(i2c_dev[index], (mraa_i2c_mode_t) intarg);
+			wrap_json_pack(&mraa_resp, "{s:i}", "mraa_result_t", mraa_ret);
+		}
+		else if (strcmp(command, "mraa_i2c_read_byte_data") == 0) {
+			int mraaread = mraa_i2c_read_byte_data(i2c_dev[index], intarg);
+			wrap_json_pack(&mraa_resp, "{s:i, s:s}", "length", mraaread, "data", data);
+		}
+		else if (strcmp(command, "mraa_i2c_read_word_data") == 0) {
+			int mraaread = mraa_i2c_read_word_data(i2c_dev[index], intarg);
+			wrap_json_pack(&mraa_resp, "{s:i, s:s}", "length", mraaread, "data", data);
+		}
+		else if (strcmp(command, "mraa_i2c_write_byte") == 0) {
+			mraa_ret = mraa_i2c_write_byte(i2c_dev[index], intarg);
+			wrap_json_pack(&mraa_resp, "{s:i}", "mraa_result_t", mraa_ret);
+		}
+		afb_req_success(request, mraa_resp, NULL);
+		return;		
+    }
+    
+    jwrap_ret = wrap_json_unpack(queryJ, "[siii!]", &command, &index, &intarg, &intarg2);
+	if (jwrap_ret == 0) {
+		if (strcmp(command, "mraa_i2c_write_byte_data") == 0) {
+			mraa_ret = mraa_i2c_write_byte_data(i2c_dev[index], intarg, intarg2);
+			wrap_json_pack(&mraa_resp, "{s:i}", "mraa_result_t", mraa_ret);
+		}
+		else if (strcmp(command, "mraa_i2c_write_word_data") == 0) {
+			mraa_ret = mraa_i2c_write_word_data(i2c_dev[index], intarg, intarg2);
+			wrap_json_pack(&mraa_resp, "{s:i}", "mraa_result_t", mraa_ret);
+		}
+		afb_req_success(request, mraa_resp, NULL);
+		return;		
+	}
+    
+    jwrap_ret = wrap_json_unpack(queryJ, "[sisi!]", &command, &index, &data, &intarg);
+    if (jwrap_ret == 0) {
+		if (strcmp(command, "mraa_i2c_read") == 0) {
+			dataout = (char*) calloc(intarg, sizeof(char));
+			int mraaread = mraa_i2c_read(i2c_dev[index], dataout, intarg);
+			wrap_json_pack(&mraa_resp, "{s:i, s:s}", "length", mraaread, "data", dataout);
+		}
+		else if (strcmp(command, "mraa_i2c_write") == 0) {
+			dataout = (char*) calloc(intarg, sizeof(char));
+			mraa_ret = mraa_i2c_write(i2c_dev[index], dataout, intarg);
+			wrap_json_pack(&mraa_resp, "{s:i, s:s}", "mraa_result_t", mraa_ret, "data", dataout);
+		}
+		afb_req_success(request, mraa_resp, NULL);
+		return;		
+	}
 }
 
 static void
@@ -74,6 +136,7 @@ dev_init(struct afb_req request)
     mraa_result_t res;
     json_object *mraa_resp = json_object_new_object();
     const char* initfunc;
+    int index;
 
     queryJ = afb_req_json(request);
     if (!queryJ) {
@@ -82,32 +145,20 @@ dev_init(struct afb_req request)
     }
 
     printf("%s\n---\n", json_object_to_json_string_ext(queryJ, JSON_C_TO_STRING_PRETTY));
-
-    enum json_type jtype= json_object_get_type(queryJ);
-    switch (jtype) {
-        case json_type_array:
-            //for (int idx=0; idx < json_object_array_length(queryJ); idx ++) {
-            // TODO: Make dynamic
-            initfunc = json_object_get_string(json_object_array_get_idx(queryJ, 0));
-            if (strcmp(initfunc, "mraa_i2c_init") == 0) {
-                // TODO: Check arg is int and valid
-                void* dev = mraa_i2c_init(json_object_get_int(json_object_array_get_idx(queryJ, 1)));
-                if (dev == NULL) {
-                    afb_req_fail_f(request, "query-notvalid","mraa_i2c_init failed");
-                    return;
-                }
-                json_object_object_add(mraa_resp, "dev", json_object_new_string(dev));
-
-                printf("%s\n---\n", json_object_to_json_string_ext(mraa_resp, JSON_C_TO_STRING_PRETTY));
-
+    int ret = wrap_json_unpack(queryJ, "[si]", &initfunc, &index);
+    if (ret == 0) {
+        if (strcmp(initfunc, "mraa_i2c_init") == 0) {
+            i2c_dev[index] = mraa_i2c_init(index);
+            if (i2c_dev == NULL) {
+                afb_req_fail_f(request, "query-notvalid","mraa_i2c_init failed");
+                return;
             }
-            break;
-        default:
-            afb_req_fail_f(request, "query-notarray","query=%s not valid JSON mraa.io command", afb_req_value(request,""));
+            wrap_json_pack(&mraa_resp, "[I]", &i2c_dev);
+            afb_req_success(request, mraa_resp, NULL);
             return;
+        }
     }
-
-    afb_req_success(request, mraa_resp, NULL);
+    afb_req_fail_f(request, "query-notarray","query=%s not valid JSON mraa.io command", afb_req_value(request,""));
     return;
 }
 
@@ -133,6 +184,9 @@ static int
 preinit()
 {
     AFB_NOTICE("mraa binding preinit (was register)");
+
+//    utarray_new(afb_i2c_contexts, &afb_i2c_contexts_icd);
+
     return 0;
 }
 

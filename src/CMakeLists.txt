@@ -1,6 +1,7 @@
 add_library (mraa-binding
              MODULE
              af-mraa-binding.c
+	     wrapjson/wrap-json.c
 )
 
 # Binder exposes a unique public entry point
@@ -14,10 +15,10 @@ target_include_directories (mraa-binding
                             PUBLIC
                             ${MRAA_INCLUDE_DIR}
                             ${JSON-C_INCLUDE_DIR}
+			    /usr/include/mraa/
 )
 
 target_link_libraries (mraa-binding
                        ${MRAA_LIBRARIES}
                        ${JSON-C_LIBRARIES}
-                       jstruct
 )
