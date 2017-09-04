@@ -32,7 +32,7 @@
 //UT_icd afb_i2c_contexts_icd = {sizeof(mraa_i2c_context), NULL, NULL, NULL};
 //UT_array *afb_i2c_contexts;
 
-mraa_i2c_context i2c_dev[10];
+mraa_i2c_context i2c_dev[1024];
 
 static void version(struct afb_req request)
 {
@@ -61,6 +61,8 @@ command(struct afb_req request)
     char* data;
     char* dataout;
     int intarg, intarg2, index, jwrap_ret;
+
+    printf("%s\n---\n", json_object_to_json_string_ext(queryJ, JSON_C_TO_STRING_PRETTY));
 
     jwrap_ret = wrap_json_unpack(queryJ, "[si!]", &command, &index);
     if (jwrap_ret == 0) {
@@ -140,15 +142,15 @@ dev_init(struct afb_req request)
 
     queryJ = afb_req_json(request);
     if (!queryJ) {
-        afb_req_fail_f (request, "query-notjson","query=%s not a valid json entry", afb_req_value(request,""));
+        afb_req_fail_f(request, "query-notjson","query=%s not a valid json entry", afb_req_value(request,""));
         return;
     }
 
     printf("%s\n---\n", json_object_to_json_string_ext(queryJ, JSON_C_TO_STRING_PRETTY));
-    int ret = wrap_json_unpack(queryJ, "[si]", &initfunc, &index);
+    int ret = wrap_json_unpack(queryJ, "[si!]", &initfunc, &index);
     if (ret == 0) {
         if (strcmp(initfunc, "mraa_i2c_init") == 0) {
-            i2c_dev[index] = mraa_i2c_init(index);
+            i2c_dev[index] = mraa_i2c_init(index+512);
             if (i2c_dev == NULL) {
                 afb_req_fail_f(request, "query-notvalid","mraa_i2c_init failed");
                 return;
@@ -196,6 +198,8 @@ init()
     AFB_NOTICE("mraa binding init");
     // TODO: Check return value and do something intelligent here
     mraa_init();
+    // special X1 lenovo command
+    mraa_add_subplatform(MRAA_GENERIC_FIRMATA, "/dev/ttyACM4");
     return 0;
 }
 
